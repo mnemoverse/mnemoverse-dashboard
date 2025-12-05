@@ -8,9 +8,12 @@ import sys
 sys.path.insert(0, str(__file__).replace('pages/1_Overview.py', ''))
 
 from db import run_query, run_scalar
-from components import render_sidebar, page_header
+from components import render_sidebar
 
 st.set_page_config(page_title="Overview | Mnemoverse", page_icon="📊", layout="wide")
+
+# Header first
+st.title("Overview")
 
 # Sidebar
 schema = render_sidebar()
@@ -19,8 +22,9 @@ if not schema:
     st.warning("Select a schema to view data.")
     st.stop()
 
-# Header
-page_header("Overview", schema)
+# Schema info under title
+st.caption(f"Schema: `{schema}`")
+st.divider()
 
 # Key metrics
 col1, col2, col3, col4 = st.columns(4)

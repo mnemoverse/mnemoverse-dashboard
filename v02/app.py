@@ -11,12 +11,7 @@ Deploy: Streamlit Cloud
 
 import streamlit as st
 
-st.set_page_config(
-    page_title="Mnemoverse Dashboard",
-    page_icon="📊",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="Mnemoverse Dashboard", page_icon="📊", layout="wide")
 
-# Redirect to Overview
+# Redirect to first page immediately
 st.switch_page("pages/1_Overview.py")

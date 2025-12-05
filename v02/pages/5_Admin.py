@@ -8,15 +8,16 @@ import sys
 sys.path.insert(0, str(__file__).replace('pages/5_Admin.py', ''))
 
 from db import get_db_url, get_engine, get_available_schemas, run_query, run_scalar, check_table_exists
-from components import render_sidebar, page_header
+from components import render_sidebar
 
 st.set_page_config(page_title="Admin | Mnemoverse", page_icon="⚙️", layout="wide")
+
+# Header first
+st.title("Admin")
 
 # Sidebar
 schema = render_sidebar()
 
-# Header (no schema required for admin)
-st.title("Admin")
 st.divider()
 
 # Connection Info

@@ -10,9 +10,12 @@ import sys
 sys.path.insert(0, str(__file__).replace('pages/4_Knowledge_Graph.py', ''))
 
 from db import run_query, run_scalar
-from components import render_sidebar, page_header
+from components import render_sidebar
 
 st.set_page_config(page_title="Knowledge Graph | Mnemoverse", page_icon="🕸️", layout="wide")
+
+# Header first
+st.title("Knowledge Graph")
 
 # Sidebar
 schema = render_sidebar()
@@ -21,8 +24,8 @@ if not schema:
     st.warning("Select a schema to view data.")
     st.stop()
 
-# Header
-page_header("Knowledge Graph", schema)
+st.caption(f"Schema: `{schema}`")
+st.divider()
 
 # Stats
 col1, col2, col3 = st.columns(3)

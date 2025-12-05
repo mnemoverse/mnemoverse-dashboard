@@ -9,8 +9,7 @@ from db import get_engine, get_available_schemas, run_scalar
 def render_sidebar():
     """Render sidebar with schema selector and connection status."""
     
-    st.sidebar.title("Mnemoverse")
-    st.sidebar.caption("Dashboard v0.2")
+    st.sidebar.title("Mnemoverse Dashboard")
     st.sidebar.divider()
     
     # Connection status
@@ -30,12 +29,24 @@ def render_sidebar():
         st.sidebar.warning("No kdm schemas found")
         return None
     
+    # Persist schema selection in session_state
+    if "current_schema" not in st.session_state:
+        st.session_state.current_schema = schemas[0]
+    
+    # Find current index
+    current_idx = 0
+    if st.session_state.current_schema in schemas:
+        current_idx = schemas.index(st.session_state.current_schema)
+    
     selected = st.sidebar.selectbox(
         "Select schema:",
         schemas,
-        index=0,
-        key="selected_schema"
+        index=current_idx,
+        key="schema_selector"
     )
+    
+    # Update session state when selection changes
+    st.session_state.current_schema = selected
     
     # Quick stats for selected schema
     if selected:
@@ -57,9 +68,6 @@ def render_sidebar():
 
 def page_header(title: str, schema: str):
     """Render page header with title and schema indicator."""
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.title(title)
-    with col2:
-        st.caption(f"Schema: `{schema}`")
+    st.title(title)
+    st.caption(f"Schema: `{schema}`")
     st.divider()
