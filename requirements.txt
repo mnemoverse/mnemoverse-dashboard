@@ -1,10 +1,9 @@
-# Core
+# Mnemoverse Dashboard v0.2
+# Required for Streamlit Cloud deployment
+
 streamlit>=1.28.0
-pandas>=2.0.0
-plotly>=5.17.0
-networkx>=3.0
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
-
-# Optional: for better performance
-numpy>=1.24.0
+pandas>=2.0.0
+plotly>=5.18.0
+networkx>=3.0
