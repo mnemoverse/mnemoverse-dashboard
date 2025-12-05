@@ -227,8 +227,8 @@ def load_kdm_stats() -> Dict[str, int]:
 
 
 @st.cache_data(ttl=60)
-def load_hebbian_graph(limit: int = 200) -> pd.DataFrame:
-    """Load Hebbian graph edges."""
+def load_hebbian_graph(min_weight: float = 0.0) -> pd.DataFrame:
+    """Load Hebbian graph edges, optionally filtered by minimum weight."""
     query = f"""
         SELECT 
             s.concept as source,
@@ -238,10 +238,30 @@ def load_hebbian_graph(limit: int = 200) -> pd.DataFrame:
         FROM kdm.hebbian_edges e
         JOIN kdm.state_atoms s ON e.source_id = s.id
         JOIN kdm.state_atoms t ON e.target_id = t.id
+        WHERE e.weight >= {min_weight}
         ORDER BY e.weight DESC
-        LIMIT {limit}
     """
     return execute_query(query)
+
+
+@st.cache_data(ttl=60)
+def get_hebbian_stats() -> dict:
+    """Get Hebbian graph statistics for slider defaults."""
+    query = """
+        SELECT 
+            COUNT(*) as total_edges,
+            MIN(weight) as min_weight,
+            MAX(weight) as max_weight,
+            AVG(weight) as avg_weight,
+            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY weight) as p25,
+            PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY weight) as p50,
+            PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY weight) as p75
+        FROM kdm.hebbian_edges
+    """
+    df = execute_query(query)
+    if df.empty:
+        return {'total_edges': 0, 'min_weight': 0, 'max_weight': 1, 'avg_weight': 0.5}
+    return df.iloc[0].to_dict()
 
 
 @st.cache_data(ttl=60)
@@ -261,14 +281,20 @@ def load_state_atoms(limit: int = 100) -> pd.DataFrame:
 
 @st.cache_data(ttl=60)
 def load_experiment_runs(limit: int = 50) -> pd.DataFrame:
-    """Load experiment runs."""
+    """Load experiment runs - adapted to actual schema."""
+    # Actual schema: run_name, model, mode, tasks_total, tasks_correct, accuracy
+    # Dashboard expects: run_id, experiment_name, baseline_accuracy, memory_accuracy, delta_accuracy, tasks_completed
     query = f"""
         SELECT 
-            run_id, experiment_name,
-            baseline_accuracy, memory_accuracy, delta_accuracy,
-            tasks_completed, created_at
+            id::text as run_id, 
+            run_name as experiment_name,
+            CASE WHEN mode = 'baseline' THEN accuracy ELSE 0.0 END as baseline_accuracy,
+            accuracy as memory_accuracy, 
+            accuracy as delta_accuracy,
+            tasks_correct as tasks_completed, 
+            started_at as created_at
         FROM kdm.experiment_runs
-        ORDER BY created_at DESC
+        ORDER BY started_at DESC
         LIMIT {limit}
     """
     return execute_query(query)
@@ -294,75 +320,126 @@ def load_daily_stats(days: int = 30) -> pd.DataFrame:
 # ============================================
 
 def render_hebbian_network(df_edges: pd.DataFrame):
-    """Render professional Hebbian network graph."""
+    """Render professional Hebbian network graph with clean dark theme."""
     if df_edges.empty:
         st.info("🔗 No Hebbian edges found. Run experiments to build the memory network.")
         return
     
-    # Build graph
+    # Build graph with weights
     G = nx.Graph()
     for _, row in df_edges.iterrows():
         G.add_edge(row['source'], row['target'], weight=row['weight'])
     
-    # Layout
-    pos = nx.spring_layout(G, k=2.5, iterations=50, seed=42)
-    
-    # Edge traces
-    edge_traces = []
+    # Weighted spring layout: stronger connections = closer nodes
+    # We invert weight for 'distance' - higher weight = smaller distance
     max_weight = df_edges['weight'].max() if df_edges['weight'].max() > 0 else 1
+    
+    # Create distance dict: strong weight = small distance
+    # distance = 1 / (weight + 0.1) normalized
+    edge_distances = {}
+    for _, row in df_edges.iterrows():
+        # Invert: high weight → low distance (closer)
+        dist = 1.0 / (row['weight'] / max_weight + 0.3)
+        edge_distances[(row['source'], row['target'])] = dist
+        edge_distances[(row['target'], row['source'])] = dist
+    
+    # Use Kamada-Kawai layout which respects edge weights as distances
+    # Or spring layout with weight parameter
+    try:
+        # Kamada-Kawai gives better results for weighted graphs
+        pos = nx.kamada_kawai_layout(G, weight='weight', scale=2.0)
+    except:
+        # Fallback to spring layout with inverted weights
+        pos = nx.spring_layout(G, k=2.0, iterations=150, seed=42, weight='weight')
+    
+    # Edge traces - thin lines, weight = thickness
+    edge_traces = []
+    min_weight = df_edges['weight'].min() if df_edges['weight'].min() > 0 else 0.01
     
     for _, row in df_edges.iterrows():
         x0, y0 = pos[row['source']]
         x1, y1 = pos[row['target']]
-        opacity = 0.2 + (row['weight'] / max_weight) * 0.8
-        width = 0.5 + (row['weight'] / max_weight) * 4
+        # Normalize weight to 0-1 range
+        norm_weight = (row['weight'] - min_weight) / (max_weight - min_weight) if max_weight > min_weight else 0.5
+        # Thin lines: 0.3px (weak) to 2.5px (strong)
+        width = 0.3 + norm_weight * 2.2
+        # Opacity also scales with weight
+        opacity = 0.25 + norm_weight * 0.55
         
         edge_traces.append(go.Scatter(
             x=[x0, x1, None], y=[y0, y1, None],
             mode='lines',
-            line=dict(width=width, color=f'rgba(102, 126, 234, {opacity})'),
-            hoverinfo='none',
+            line=dict(width=width, color=f'rgba(99, 179, 237, {opacity})'),
+            hoverinfo='text',
+            hovertext=f"Weight: {row['weight']:.3f}",
             showlegend=False
         ))
     
-    # Node trace
+    # Node trace - bigger labels, better colors
     node_x = [pos[n][0] for n in G.nodes()]
     node_y = [pos[n][1] for n in G.nodes()]
     node_degrees = [G.degree(n) for n in G.nodes()]
     node_labels = list(G.nodes())
+    max_degree = max(node_degrees) if node_degrees else 1
+    
+    # Truncate long labels for display
+    display_labels = [n[:20] + '...' if len(n) > 20 else n for n in node_labels]
     
     node_trace = go.Scatter(
         x=node_x, y=node_y,
         mode='markers+text',
-        text=node_labels,
-        textposition='top center',
-        textfont=dict(size=9, color='#ccc'),
+        text=display_labels,
+        textposition='bottom center',
+        textfont=dict(size=11, color='#ffffff', family='Arial'),  # White, larger text
         hoverinfo='text',
-        hovertext=[f"<b>{n}</b><br>Connections: {G.degree(n)}" for n in G.nodes()],
+        hovertext=[f"<b>{n}</b><br>Connections: {G.degree(n)}<br>Weight sum: {sum(G[n][nbr]['weight'] for nbr in G[n]):.2f}" for n in G.nodes()],
         marker=dict(
-            size=[10 + d * 4 for d in node_degrees],
+            size=[16 + (d / max_degree) * 30 for d in node_degrees],  # Bigger nodes
             color=node_degrees,
-            colorscale='Viridis',
-            colorbar=dict(title='Connections', thickness=15, x=1.02),
-            line=dict(width=2, color='#1a1a2e')
+            colorscale=[
+                [0, '#3b82f6'],      # Blue for low
+                [0.5, '#8b5cf6'],    # Purple for mid  
+                [1, '#f59e0b']       # Orange for high (hubs)
+            ],
+            colorbar=dict(
+                title=dict(text='Connections', font=dict(color='#e0e0e0')),
+                thickness=15, 
+                x=1.02,
+                tickfont=dict(color='#e0e0e0')
+            ),
+            line=dict(width=2, color='#1e293b')  # Subtle border
         ),
         showlegend=False
     )
     
     fig = go.Figure(data=edge_traces + [node_trace])
     fig.update_layout(
-        title=dict(text='🧠 Hebbian Memory Network', font=dict(size=18, color='#e0e0e0')),
+        title=dict(
+            text='🧠 Hebbian Memory Network', 
+            font=dict(size=20, color='#f1f5f9', family='Arial Black'),
+            x=0.5, xanchor='center'
+        ),
         showlegend=False,
         hovermode='closest',
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, visible=False),
-        height=600,
-        margin=dict(l=20, r=20, t=60, b=20),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
+        height=700,
+        margin=dict(l=40, r=40, t=80, b=40),
+        paper_bgcolor='#0f172a',  # Dark slate background
+        plot_bgcolor='#0f172a',
     )
     
     st.plotly_chart(fig, use_container_width=True)
+    
+    # Stats below graph
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Nodes", len(G.nodes()))
+    with col2:
+        st.metric("Edges", len(G.edges()))
+    with col3:
+        hub_node = max(G.nodes(), key=lambda n: G.degree(n)) if G.nodes() else "N/A"
+        st.metric("Top Hub", hub_node[:15] + "..." if len(hub_node) > 15 else hub_node)
 
 
 def render_accuracy_chart(df: pd.DataFrame):
@@ -569,15 +646,15 @@ if page == "🏠 Overview":
     
     st.markdown("---")
     
-    # Quick Hebbian preview
+    # Quick Hebbian preview - show top weighted edges
     st.markdown("### 🕸️ Memory Network Preview")
-    df_edges = load_hebbian_graph(50)
+    df_edges = load_hebbian_graph(min_weight=0.0)
     if not df_edges.empty:
         col1, col2, col3 = st.columns(3)
-        col1.metric("Edges", len(df_edges))
+        col1.metric("Total Edges", len(df_edges))
         col2.metric("Avg Weight", f"{df_edges['weight'].mean():.4f}")
         col3.metric("Max Weight", f"{df_edges['weight'].max():.4f}")
-        st.info("👉 Go to **Memory Graph** for full visualization")
+        st.info("👉 Go to **Memory Graph** for full visualization with filters")
     else:
         st.info("🔗 No connections yet. Run experiments to build the graph.")
 
@@ -585,31 +662,59 @@ if page == "🏠 Overview":
 elif page == "🧠 Memory Graph":
     st.markdown("### 🧠 Hebbian Memory Network")
     
-    # Controls
-    col1, col2 = st.columns([1, 3])
-    with col1:
-        limit = st.slider("Max edges", 50, 500, 200, 50)
+    # Get stats for smart defaults
+    stats = get_hebbian_stats()
+    total_edges = int(stats.get('total_edges', 0))
     
-    df_edges = load_hebbian_graph(limit)
-    
-    if not df_edges.empty:
-        # Stats
-        col1, col2, col3, col4 = st.columns(4)
-        unique_nodes = len(set(df_edges['source'].tolist() + df_edges['target'].tolist()))
-        col1.metric("Edges", len(df_edges))
-        col2.metric("Concepts", unique_nodes)
-        col3.metric("Avg Weight", f"{df_edges['weight'].mean():.4f}")
-        col4.metric("Co-activations", df_edges['co_activation_count'].sum())
-        
-        st.markdown("---")
-        render_hebbian_network(df_edges)
-        
-        st.markdown("---")
-        st.markdown("### 🔝 Strongest Connections")
-        top = df_edges.nlargest(15, 'weight')[['source', 'target', 'weight', 'co_activation_count']]
-        st.dataframe(top.style.format({'weight': '{:.4f}'}), use_container_width=True)
+    if total_edges == 0:
+        st.info("🔗 No Hebbian edges found. Run experiments to build the memory network.")
     else:
-        st.warning("No Hebbian edges found. Run experiments to build connections.")
+        min_w = float(stats.get('min_weight', 0))
+        max_w = float(stats.get('max_weight', 1))
+        avg_w = float(stats.get('avg_weight', 0.5))
+        p50 = float(stats.get('p50', avg_w))
+        
+        st.markdown(f"**Total edges in database:** {total_edges} | Weight range: {min_w:.4f} - {max_w:.4f}")
+        
+        # Filter controls
+        col1, col2, col3 = st.columns([2, 2, 1])
+        with col1:
+            # Default to median to show ~50% of edges
+            min_weight_filter = st.slider(
+                "Minimum weight (filter weak connections)", 
+                min_value=min_w,
+                max_value=max_w,
+                value=min(p50, max_w * 0.1),  # Default: 10% of max or median
+                step=(max_w - min_w) / 100 if max_w > min_w else 0.01,
+                format="%.4f"
+            )
+        with col2:
+            st.markdown(f"**Showing edges with weight ≥ {min_weight_filter:.4f}**")
+        with col3:
+            if st.button("🔄 Refresh"):
+                st.cache_data.clear()
+                st.rerun()
+        
+        df_edges = load_hebbian_graph(min_weight=min_weight_filter)
+    
+        if not df_edges.empty:
+            # Stats
+            col1, col2, col3, col4 = st.columns(4)
+            unique_nodes = len(set(df_edges['source'].tolist() + df_edges['target'].tolist()))
+            col1.metric("Edges (filtered)", len(df_edges), delta=f"of {total_edges}")
+            col2.metric("Concepts", unique_nodes)
+            col3.metric("Avg Weight", f"{df_edges['weight'].mean():.4f}")
+            col4.metric("Co-activations", int(df_edges['co_activation_count'].sum()))
+            
+            st.markdown("---")
+            render_hebbian_network(df_edges)
+            
+            st.markdown("---")
+            st.markdown("### 🔝 Strongest Connections")
+            top = df_edges.nlargest(15, 'weight')[['source', 'target', 'weight', 'co_activation_count']]
+            st.dataframe(top.style.format({'weight': '{:.4f}'}), use_container_width=True)
+        else:
+            st.warning("No edges match the filter. Try lowering the minimum weight.")
 
 
 elif page == "🔬 Experiments":
