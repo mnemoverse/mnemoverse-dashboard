@@ -58,11 +58,20 @@ if not schema:
 
 page_header("🧠 Memory State", schema)
 
+# Page intro
+st.info(
+    "🧠 **Inside the Memory:** See how the system learns which concepts are useful. "
+    "Adaline is a neural network that predicts concept value based on feedback."
+)
+
 # ==============================================================================
 # Adaline Learning State
 # ==============================================================================
 
 st.subheader("🎓 Adaline Learning")
+st.caption(
+    "Adaptive Linear Neuron — learns from feedback to predict which concepts will help solve tasks."
+)
 
 adaline = run_query("""
     SELECT 

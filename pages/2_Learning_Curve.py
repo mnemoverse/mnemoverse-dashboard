@@ -62,11 +62,18 @@ if not schema:
 
 page_header("📈 Learning Curve", schema)
 
+# Page intro
+st.info(
+    "🎯 **Key Question:** Does accuracy improve as memory grows? "
+    "This page tests our main hypothesis — that learning from past solutions helps solve new tasks."
+)
+
 # ==============================================================================
 # Key Metrics Row
 # ==============================================================================
 
 st.subheader("📊 Experiment Metrics")
+st.caption("Current experiment progress. Tasks = attempts with task_id.")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -105,7 +112,10 @@ st.divider()
 # ==============================================================================
 
 st.subheader("📊 Accuracy vs Memory Size")
-st.caption("**Key Hypothesis**: Accuracy should increase as memory grows")
+st.caption(
+    "💡 **Hypothesis:** If the line trends upward, memory is helping! "
+    "Flat or declining = memory may not be effective."
+)
 
 learning_data = run_query("""
     WITH ordered_tasks AS (

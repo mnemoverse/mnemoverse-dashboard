@@ -26,7 +26,7 @@ Deploy:
 
 import streamlit as st
 
-# Configure app
+# Configure app - this sets the browser tab title and sidebar name
 st.set_page_config(
     page_title="Mnemoverse Dashboard",
     page_icon="🧠",
@@ -34,5 +34,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Redirect to Overview page
-st.switch_page("pages/1_Overview.py")
+# Main page just redirects to Home
+# The "streamlit app" in sidebar will show as page_title from set_page_config
+st.switch_page("pages/0_🏠_Home.py")

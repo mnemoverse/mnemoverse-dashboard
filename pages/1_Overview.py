@@ -53,11 +53,20 @@ if not schema:
 
 page_header("📊 Overview", schema)
 
+# Welcome message
+st.info(
+    "👋 **Welcome!** This page shows a snapshot of the current experiment. "
+    "Use the metrics below to quickly assess memory size and learning progress."
+)
+
 # ==============================================================================
 # Key Metrics Row
 # ==============================================================================
 
 st.subheader("📈 Key Metrics")
+st.caption(
+    "Core memory components. Hover over `?` for explanations."
+)
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -84,6 +93,9 @@ st.divider()
 # ==============================================================================
 
 st.subheader("🧪 Last Experiment Run")
+st.caption(
+    "Most recent experiment. Compare baseline vs memory mode on the Learning Curve page."
+)
 
 last_run = run_query("""
     SELECT 

@@ -27,6 +27,7 @@ def render_sidebar() -> str | None:
     Render sidebar with schema selector and connection status.
     
     Features:
+    - Welcome message and about section
     - Schema dropdown (persisted in session state)
     - Connection status indicator
     - Quick stats for selected schema
@@ -35,7 +36,14 @@ def render_sidebar() -> str | None:
     Returns:
         Selected schema name or None if not connected/selected.
     """
-    st.sidebar.title("Mnemoverse Dashboard")
+    # Logo and title
+    st.sidebar.title("🧠 Mnemoverse")
+    st.sidebar.caption(
+        "**Cognitive Memory Analytics**\n\n"
+        "Track how AI learns from experience. "
+        "Visualize memory growth, learning curves, "
+        "and knowledge connections."
+    )
     st.sidebar.divider()
     
     # Connection status
@@ -48,7 +56,7 @@ def render_sidebar() -> str | None:
         return None
     
     # Schema selector
-    st.sidebar.subheader("Schema")
+    st.sidebar.subheader("🗂️ Experiment")
     schemas = get_available_schemas()
     
     if not schemas:

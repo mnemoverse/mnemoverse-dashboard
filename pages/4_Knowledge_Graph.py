@@ -55,11 +55,18 @@ if not schema:
 
 page_header("🕸️ Knowledge Graph", schema)
 
+# Page intro
+st.info(
+    "🔗 **Concept Connections:** Visualize how concepts link together. "
+    "Based on Hebbian learning — \"neurons that fire together, wire together.\""
+)
+
 # ==============================================================================
 # Graph Statistics
 # ==============================================================================
 
 st.subheader("📊 Graph Statistics")
+st.caption("Network metrics. More connections = richer knowledge structure.")
 
 col1, col2, col3 = st.columns(3)
 

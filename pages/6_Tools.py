@@ -23,7 +23,10 @@ st.set_page_config(
 )
 
 st.title("🔧 Tools & Integrations")
-st.caption("Quick access to external observability and development tools")
+st.info(
+    "🚀 **External Tools:** Quick links to databases, experiment tracking, "
+    "and LLM tracing. Everything you need to monitor and debug."
+)
 st.divider()
 
 # ==============================================================================

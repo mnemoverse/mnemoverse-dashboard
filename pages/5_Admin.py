@@ -48,6 +48,10 @@ st.set_page_config(
 schema = render_sidebar()
 
 st.title("⚙️ Admin")
+st.info(
+    "🛠️ **System Management:** Check database health, inspect schemas, "
+    "and manage cached data. For developers and debugging."
+)
 st.divider()
 
 # ==============================================================================
@@ -55,6 +59,7 @@ st.divider()
 # ==============================================================================
 
 st.subheader("🔌 Connection Status")
+st.caption("Database connectivity and configuration details.")
 
 db_url = get_db_url()
 engine = get_engine()
