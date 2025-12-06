@@ -1,76 +1,145 @@
 """
-Learning Curve Page
-MAIN page for experiment analysis.
+Learning Curve Page - Main Experiment Analysis.
 
-Shows:
-- Accuracy vs Memory Size (the key hypothesis chart)
-- Baseline vs Memory comparison
-- Task completion timeline
+This is the KEY page for validating the memory hypothesis:
+"Does accuracy improve as memory grows?"
+
+Charts:
+1. Accuracy vs Memory Size - Cumulative accuracy over tasks
+2. Baseline vs Memory - Compare modes side-by-side
+3. Task Timeline - Success distribution over time
+
+Metrics:
+- Tasks Solved: Total attempts with task_id
+- Correct: Attempts where is_successful=true
+- Accuracy: correct / total * 100%
+- Memory Size: Number of process atoms stored
+
+Data Sources:
+- {schema}.process_atoms - Individual solution attempts
+- {schema}.experiment_runs - Run metadata with mode (baseline/memory)
 """
 
-import streamlit as st
+import sys
+from pathlib import Path
+
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import pandas as pd
-import sys
-sys.path.insert(0, str(__file__).replace('pages/2_Learning_Curve.py', ''))
+import streamlit as st
 
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from components import info_tooltip, page_header, render_sidebar
 from db import run_query, run_scalar
-from components import render_sidebar
+from metric_definitions import (
+    METRIC_ACCURACY,
+    METRIC_BASELINE,
+    METRIC_CORRECT,
+    METRIC_DELTA,
+    METRIC_MEMORY_MODE,
+    METRIC_MEMORY_SIZE,
+    METRIC_TASKS_SOLVED,
+)
 
-st.set_page_config(page_title="Learning Curve | Mnemoverse", page_icon="📈", layout="wide")
+# ==============================================================================
+# Page Configuration
+# ==============================================================================
 
-# Header first
-st.title("Learning Curve")
+st.set_page_config(
+    page_title="Learning Curve | Mnemoverse",
+    page_icon="📈",
+    layout="wide"
+)
 
-# Sidebar
+# ==============================================================================
+# Sidebar & Header
+# ==============================================================================
+
 schema = render_sidebar()
 
 if not schema:
     st.warning("Select a schema to view data.")
     st.stop()
 
-st.caption(f"Schema: `{schema}`")
-st.divider()
+page_header("📈 Learning Curve", schema)
 
-# Key experiment metrics
+# ==============================================================================
+# Key Metrics Row
+# ==============================================================================
+
+# Header with info
+header_col, info_col = st.columns([10, 1])
+with header_col:
+    st.subheader("📊 Experiment Metrics")
+with info_col:
+    with st.popover("ℹ️"):
+        st.markdown("""
+        **Key Experiment Metrics**
+        
+        These metrics track progress of the current experiment:
+        - Tasks Solved: Total attempts
+        - Correct: Successful solutions
+        - Accuracy: Success rate (%)
+        - Memory Size: Knowledge accumulated
+        """)
+
 col1, col2, col3, col4 = st.columns(4)
 
-# Total tasks solved
+# Query metrics
 tasks_total = run_scalar("""
     SELECT COUNT(*) FROM {schema}.process_atoms WHERE task_id IS NOT NULL
-""", schema)
+""", schema) or 0
 
-# Tasks correct (is_successful = true)
 tasks_correct = run_scalar("""
     SELECT COUNT(*) FROM {schema}.process_atoms 
     WHERE task_id IS NOT NULL AND is_successful = true
-""", schema)
+""", schema) or 0
 
-# Memory size (process atoms)
-memory_size = run_scalar("SELECT COUNT(*) FROM {schema}.process_atoms", schema)
+memory_size = run_scalar(
+    "SELECT COUNT(*) FROM {schema}.process_atoms", schema
+) or 0
 
-# Calculate accuracy
-accuracy = (tasks_correct / tasks_total * 100) if tasks_total and tasks_total > 0 else 0
+accuracy = (tasks_correct / tasks_total * 100) if tasks_total > 0 else 0
 
 with col1:
-    st.metric("Tasks Solved", tasks_total or 0)
+    m_col, i_col = st.columns([4, 1])
+    with m_col:
+        st.metric("Tasks Solved", tasks_total)
+    with i_col:
+        info_tooltip(METRIC_TASKS_SOLVED)
 
 with col2:
-    st.metric("Correct", tasks_correct or 0)
+    m_col, i_col = st.columns([4, 1])
+    with m_col:
+        st.metric("Correct", tasks_correct)
+    with i_col:
+        info_tooltip(METRIC_CORRECT)
 
 with col3:
-    st.metric("Accuracy", f"{accuracy:.1f}%")
+    m_col, i_col = st.columns([4, 1])
+    with m_col:
+        st.metric("Accuracy", f"{accuracy:.1f}%")
+    with i_col:
+        info_tooltip(METRIC_ACCURACY)
 
 with col4:
-    st.metric("Memory Size", memory_size or 0)
+    m_col, i_col = st.columns([4, 1])
+    with m_col:
+        st.metric("Memory Size", memory_size)
+    with i_col:
+        info_tooltip(METRIC_MEMORY_SIZE)
 
 st.divider()
 
-# Learning Curve Chart - Accuracy vs Memory Size
-st.subheader("Accuracy vs Memory Size")
+# ==============================================================================
+# Learning Curve Chart - The Key Hypothesis Visualization
+# ==============================================================================
 
-# Get cumulative accuracy over time
+st.subheader("📊 Accuracy vs Memory Size")
+st.caption("**Key Hypothesis**: Accuracy should increase as memory grows")
+
 learning_data = run_query("""
     WITH ordered_tasks AS (
         SELECT 
@@ -86,8 +155,10 @@ learning_data = run_query("""
         SELECT 
             task_num,
             task_num as memory_size,
-            SUM(CASE WHEN is_successful THEN 1 ELSE 0 END) OVER (ORDER BY task_num) as correct_so_far,
-            (SUM(CASE WHEN is_successful THEN 1 ELSE 0 END) OVER (ORDER BY task_num))::float / task_num * 100 as accuracy
+            SUM(CASE WHEN is_successful THEN 1 ELSE 0 END) 
+                OVER (ORDER BY task_num) as correct_so_far,
+            (SUM(CASE WHEN is_successful THEN 1 ELSE 0 END) 
+                OVER (ORDER BY task_num))::float / task_num * 100 as accuracy
         FROM ordered_tasks
     )
     SELECT task_num, memory_size, accuracy
@@ -96,28 +167,40 @@ learning_data = run_query("""
 """, schema)
 
 if learning_data.empty:
-    st.info("No task data yet. Run an experiment to see the learning curve.")
+    st.info("📭 No task data yet. Run an experiment to see the learning curve.")
 else:
     fig = px.line(
         learning_data,
         x='memory_size',
         y='accuracy',
-        title='Cumulative Accuracy Over Tasks',
-        labels={'memory_size': 'Tasks Completed', 'accuracy': 'Accuracy (%)'}
+        labels={
+            'memory_size': 'Tasks Completed',
+            'accuracy': 'Cumulative Accuracy (%)'
+        }
     )
-    fig.update_traces(line=dict(width=2))
+    
+    fig.update_traces(
+        line=dict(width=2, color='#1f77b4'),
+        hovertemplate='<b>Task %{x}</b><br>Accuracy: %{y:.1f}%<extra></extra>'
+    )
+    
     fig.update_layout(
         height=400,
         xaxis_title="Memory Size (tasks completed)",
         yaxis_title="Accuracy (%)",
-        yaxis_range=[0, 100]
+        yaxis_range=[0, 100],
+        hovermode='x unified'
     )
+    
     st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
-# Experiment runs comparison
-st.subheader("Experiment Runs Comparison")
+# ==============================================================================
+# Baseline vs Memory Comparison
+# ==============================================================================
+
+st.subheader("⚖️ Baseline vs Memory Comparison")
 
 runs = run_query("""
     SELECT 
@@ -133,59 +216,87 @@ runs = run_query("""
 """, schema)
 
 if runs.empty:
-    st.info("No experiment runs recorded yet.")
+    st.info("📭 No experiment runs recorded yet.")
 else:
-    # Baseline vs Memory comparison
+    # Split by mode
     baseline_runs = runs[runs['mode'] == 'baseline']
     memory_runs = runs[runs['mode'] == 'memory']
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         if not baseline_runs.empty:
             baseline_acc = baseline_runs['accuracy'].mean()
-            st.metric("Baseline Accuracy (avg)", f"{baseline_acc:.1%}" if baseline_acc else "N/A")
+            st.metric(
+                "📝 Baseline (avg)",
+                f"{baseline_acc:.1%}" if pd.notna(baseline_acc) else "N/A",
+                help="Average accuracy without memory assistance"
+            )
         else:
-            st.metric("Baseline Accuracy", "No baseline runs")
+            st.metric("📝 Baseline", "No runs")
     
     with col2:
         if not memory_runs.empty:
             memory_acc = memory_runs['accuracy'].mean()
-            st.metric("Memory Accuracy (avg)", f"{memory_acc:.1%}" if memory_acc else "N/A")
-            
-            # Delta
-            if not baseline_runs.empty and baseline_acc:
-                delta = memory_acc - baseline_acc
-                st.caption(f"Delta: {delta:+.1%}")
+            st.metric(
+                "🧠 Memory (avg)",
+                f"{memory_acc:.1%}" if pd.notna(memory_acc) else "N/A",
+                help="Average accuracy with memory assistance"
+            )
         else:
-            st.metric("Memory Accuracy", "No memory runs")
+            st.metric("🧠 Memory", "No runs")
+    
+    with col3:
+        if not baseline_runs.empty and not memory_runs.empty:
+            baseline_acc = baseline_runs['accuracy'].mean()
+            memory_acc = memory_runs['accuracy'].mean()
+            if pd.notna(baseline_acc) and pd.notna(memory_acc):
+                delta = memory_acc - baseline_acc
+                delta_pct = delta * 100
+                st.metric(
+                    "📊 Delta",
+                    f"{delta:+.1%}",
+                    delta=f"{delta_pct:+.1f}pp",
+                    help="Memory improvement over baseline"
+                )
+            else:
+                st.metric("📊 Delta", "N/A")
+        else:
+            st.metric("📊 Delta", "Need both modes")
     
     st.divider()
     
     # Runs table
+    st.caption("Recent Experiment Runs")
     st.dataframe(
         runs,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "run_name": "Run",
-            "mode": "Mode",
-            "tasks_total": "Total",
-            "tasks_correct": "Correct",
+            "run_name": st.column_config.TextColumn("Run Name"),
+            "mode": st.column_config.TextColumn(
+                "Mode",
+                help="baseline=no memory, memory=with KDMemory"
+            ),
+            "tasks_total": st.column_config.NumberColumn("Total"),
+            "tasks_correct": st.column_config.NumberColumn("Correct"),
             "accuracy": st.column_config.ProgressColumn(
                 "Accuracy",
                 format="%.1f%%",
                 min_value=0,
                 max_value=1,
             ),
-            "started_at": "Started"
+            "started_at": st.column_config.DatetimeColumn("Started")
         }
     )
 
 st.divider()
 
-# Task success timeline
-st.subheader("Task Success Timeline")
+# ==============================================================================
+# Task Success Timeline
+# ==============================================================================
+
+st.subheader("📅 Task Success Timeline")
 
 timeline = run_query("""
     SELECT 
@@ -199,27 +310,35 @@ timeline = run_query("""
 """, schema)
 
 if timeline.empty:
-    st.info("No timeline data available.")
+    st.info("📭 No timeline data available.")
 else:
     timeline['accuracy'] = timeline['correct'] / timeline['total'] * 100
     
     fig = go.Figure()
+    
     fig.add_trace(go.Bar(
         x=timeline['date'],
         y=timeline['total'],
         name='Total Tasks',
-        marker_color='lightgray'
+        marker_color='lightgray',
+        hovertemplate='<b>%{x}</b><br>Total: %{y}<extra></extra>'
     ))
+    
     fig.add_trace(go.Bar(
         x=timeline['date'],
         y=timeline['correct'],
         name='Correct',
-        marker_color='green'
+        marker_color='#2ecc71',
+        hovertemplate='<b>%{x}</b><br>Correct: %{y}<extra></extra>'
     ))
+    
     fig.update_layout(
         barmode='overlay',
         height=300,
         xaxis_title="Date",
-        yaxis_title="Tasks"
+        yaxis_title="Tasks",
+        legend=dict(orientation='h', yanchor='bottom', y=1.02),
+        hovermode='x unified'
     )
+    
     st.plotly_chart(fig, use_container_width=True)

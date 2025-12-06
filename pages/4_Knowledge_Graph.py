@@ -1,60 +1,134 @@
 """
-Knowledge Graph Page
-Hebbian network visualization.
+Knowledge Graph Page - Hebbian Network Visualization.
+
+Visualizes the concept co-activation network built during learning:
+- Nodes = Concepts (state atoms)
+- Edges = Hebbian connections (concepts used together)
+- Edge weight = Connection strength (0-1)
+
+Hebbian Learning:
+"Neurons that fire together, wire together"
+When concepts are retrieved together for a task, their connection strengthens.
+
+Data Sources:
+- {schema}.state_atoms - Concept nodes
+- {schema}.hebbian_edges - Connection edges with weights
 """
 
-import streamlit as st
-import plotly.graph_objects as go
-import networkx as nx
 import sys
-sys.path.insert(0, str(__file__).replace('pages/4_Knowledge_Graph.py', ''))
+from pathlib import Path
 
+import networkx as nx
+import plotly.graph_objects as go
+import streamlit as st
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from components import info_tooltip, page_header, render_sidebar
 from db import run_query, run_scalar
-from components import render_sidebar
+from metric_definitions import (
+    METRIC_AVG_WEIGHT,
+    METRIC_COACTIVATIONS,
+    METRIC_CONCEPTS,
+    METRIC_CONNECTIONS,
+    METRIC_EDGE_WEIGHT,
+)
 
-st.set_page_config(page_title="Knowledge Graph | Mnemoverse", page_icon="🕸️", layout="wide")
+# ==============================================================================
+# Page Configuration
+# ==============================================================================
 
-# Header first
-st.title("Knowledge Graph")
+st.set_page_config(
+    page_title="Knowledge Graph | Mnemoverse",
+    page_icon="🕸️",
+    layout="wide"
+)
 
-# Sidebar
+# ==============================================================================
+# Sidebar & Header
+# ==============================================================================
+
 schema = render_sidebar()
 
 if not schema:
     st.warning("Select a schema to view data.")
     st.stop()
 
-st.caption(f"Schema: `{schema}`")
-st.divider()
+page_header("🕸️ Knowledge Graph", schema)
 
-# Stats
+# ==============================================================================
+# Graph Statistics
+# ==============================================================================
+
+header_col, info_col = st.columns([10, 1])
+with header_col:
+    st.subheader("📊 Graph Statistics")
+with info_col:
+    with st.popover("ℹ️"):
+        st.markdown("""
+        **Hebbian Knowledge Graph**
+        
+        Visualizes concept relationships:
+        - **Concepts**: Learned patterns (nodes)
+        - **Connections**: Co-activation links (edges)
+        - **Weight**: Connection strength (0-1)
+        
+        Based on Hebbian learning principle.
+        """)
+
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    nodes = run_scalar("SELECT COUNT(*) FROM {schema}.state_atoms", schema)
-    st.metric("Concepts", nodes or 0)
+    nodes = run_scalar("SELECT COUNT(*) FROM {schema}.state_atoms", schema) or 0
+    m_col, i_col = st.columns([4, 1])
+    with m_col:
+        st.metric("Concepts", nodes)
+    with i_col:
+        info_tooltip(METRIC_CONCEPTS)
 
 with col2:
-    edges = run_scalar("SELECT COUNT(*) FROM {schema}.hebbian_edges", schema)
-    st.metric("Connections", edges or 0)
+    edges = run_scalar("SELECT COUNT(*) FROM {schema}.hebbian_edges", schema) or 0
+    m_col, i_col = st.columns([4, 1])
+    with m_col:
+        st.metric("Connections", edges)
+    with i_col:
+        info_tooltip(METRIC_CONNECTIONS)
 
 with col3:
-    avg_weight = run_scalar("SELECT AVG(weight) FROM {schema}.hebbian_edges", schema)
-    st.metric("Avg Weight", f"{avg_weight:.4f}" if avg_weight else "N/A")
+    avg_weight = run_scalar(
+        "SELECT AVG(weight) FROM {schema}.hebbian_edges", schema
+    )
+    m_col, i_col = st.columns([4, 1])
+    with m_col:
+        st.metric("Avg Weight", f"{avg_weight:.4f}" if avg_weight else "N/A")
+    with i_col:
+        info_tooltip(METRIC_AVG_WEIGHT)
 
 st.divider()
 
-# Weight filter
-if edges and edges > 0:
+# ==============================================================================
+# Weight Filter
+# ==============================================================================
+
+if edges > 0:
+    st.caption("🔧 **Filter Settings**")
     min_weight = st.slider(
-        "Minimum weight filter",
+        "Minimum edge weight",
         min_value=0.0,
         max_value=1.0,
         value=0.0,
-        step=0.01
+        step=0.01,
+        help="Hide weak connections to focus on strong relationships"
     )
 else:
     min_weight = 0.0
+
+# ==============================================================================
+# Graph Visualization
+# ==============================================================================
+
+st.subheader("🌐 Concept Network")
 
 # Load graph data
 graph_data = run_query(f"""
@@ -72,17 +146,24 @@ graph_data = run_query(f"""
 """, schema)
 
 if graph_data.empty:
-    st.info("No Hebbian edges found. Run experiment to build the knowledge graph.")
+    st.info(
+        "📭 No Hebbian edges found. Run an experiment to build the knowledge graph."
+    )
 else:
     # Build NetworkX graph
     G = nx.Graph()
     for _, row in graph_data.iterrows():
-        G.add_edge(row['source'], row['target'], weight=row['weight'])
+        G.add_edge(
+            row['source'],
+            row['target'],
+            weight=row['weight'],
+            co_activations=row['co_activation_count']
+        )
     
-    # Layout
+    # Compute layout
     pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
     
-    # Edge traces
+    # Build edge traces
     edge_x, edge_y = [], []
     for edge in G.edges():
         x0, y0 = pos[edge[0]]
@@ -91,37 +172,53 @@ else:
         edge_y.extend([y0, y1, None])
     
     edge_trace = go.Scatter(
-        x=edge_x, y=edge_y,
+        x=edge_x,
+        y=edge_y,
         line=dict(width=0.5, color='#888'),
         hoverinfo='none',
-        mode='lines'
+        mode='lines',
+        name='Connections'
     )
     
-    # Node traces
+    # Build node traces
     node_x = [pos[node][0] for node in G.nodes()]
     node_y = [pos[node][1] for node in G.nodes()]
     node_degrees = [G.degree(node) for node in G.nodes()]
     node_labels = list(G.nodes())
     
-    # Truncate long labels
-    display_labels = [n[:20] + '...' if len(n) > 20 else n for n in node_labels]
+    # Truncate long labels for display
+    display_labels = [
+        n[:20] + '...' if len(n) > 20 else n
+        for n in node_labels
+    ]
     
     node_trace = go.Scatter(
-        x=node_x, y=node_y,
+        x=node_x,
+        y=node_y,
         mode='markers+text',
         hoverinfo='text',
         text=display_labels,
         textposition="top center",
-        hovertext=[f"{n}\nConnections: {G.degree(n)}" for n in G.nodes()],
+        textfont=dict(size=9),
+        hovertext=[
+            f"<b>{n}</b><br>Connections: {G.degree(n)}"
+            for n in G.nodes()
+        ],
         marker=dict(
             size=[10 + d * 3 for d in node_degrees],
             color=node_degrees,
             colorscale='Blues',
-            colorbar=dict(title="Connections"),
+            colorbar=dict(
+                title="Connections",
+                thickness=15,
+                len=0.5
+            ),
             line=dict(width=1, color='#333')
-        )
+        ),
+        name='Concepts'
     )
     
+    # Create figure
     fig = go.Figure(
         data=[edge_trace, node_trace],
         layout=go.Layout(
@@ -130,18 +227,26 @@ else:
             margin=dict(b=20, l=5, r=5, t=40),
             xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
             yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-            height=500
+            height=500,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)'
         )
     )
     
     st.plotly_chart(fig, use_container_width=True)
     
-    st.caption(f"Showing {len(G.nodes())} concepts, {len(G.edges())} connections (weight >= {min_weight})")
+    st.caption(
+        f"📊 Showing **{len(G.nodes())}** concepts, "
+        f"**{len(G.edges())}** connections (weight ≥ {min_weight})"
+    )
 
 st.divider()
 
-# Top connections table
-st.subheader("Strongest Connections")
+# ==============================================================================
+# Strongest Connections Table
+# ==============================================================================
+
+st.subheader("🔗 Strongest Connections")
 
 top_connections = run_query("""
     SELECT 
@@ -157,21 +262,31 @@ top_connections = run_query("""
 """, schema)
 
 if top_connections.empty:
-    st.info("No connections to display.")
+    st.info("📭 No connections to display.")
 else:
     st.dataframe(
         top_connections,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "source": "Source",
-            "target": "Target",
+            "source": st.column_config.TextColumn(
+                "Source",
+                help="First concept in the connection"
+            ),
+            "target": st.column_config.TextColumn(
+                "Target",
+                help="Second concept in the connection"
+            ),
             "weight": st.column_config.ProgressColumn(
                 "Weight",
                 format="%.4f",
                 min_value=0,
                 max_value=1,
+                help="Connection strength (0-1)"
             ),
-            "co_activation_count": "Co-activations"
+            "co_activation_count": st.column_config.NumberColumn(
+                "Co-activations",
+                help="Times these concepts were used together"
+            )
         }
     )

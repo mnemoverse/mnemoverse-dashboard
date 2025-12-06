@@ -1,38 +1,83 @@
 """
-Memory State Page
-Shows current state of memory system.
+Memory State Page - Adaline Learning & Concept Analysis.
 
-- Top concepts by Adaline utility
-- Feedback distribution
-- Adaline learning progress
+This page shows the internal state of the memory system:
+- Adaline perceptron learning state (weights, error, learning rate)
+- Feedback distribution (positive vs negative signals)
+- Concept utilities (which concepts are most valuable)
 - Recent insights quality
+
+Key Concepts:
+- Adaline: Adaptive Linear Neuron for utility prediction
+- Utility: How useful a concept is for solving tasks (0-1)
+- Feedback: Learning signals from task success/failure
+
+Data Sources:
+- {schema}.adaline_state - Perceptron state snapshots
+- {schema}.feedback_events - Learning signals
+- {schema}.state_atoms - Concept utilities and usage
+- {schema}.process_atoms - Solution attempts with feedback
 """
 
-import streamlit as st
-import plotly.express as px
 import sys
-sys.path.insert(0, str(__file__).replace('pages/3_Memory_State.py', ''))
+from pathlib import Path
 
+import plotly.express as px
+import streamlit as st
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from components import info_tooltip, page_header, render_sidebar
 from db import run_query, run_scalar
-from components import render_sidebar
+from metric_definitions import (
+    METRIC_ADALINE_UPDATES,
+    METRIC_AVG_ERROR,
+    METRIC_LEARNING_RATE,
+    METRIC_USE_COUNT,
+    METRIC_UTILITY,
+)
 
-st.set_page_config(page_title="Memory State | Mnemoverse", page_icon="🧠", layout="wide")
+# ==============================================================================
+# Page Configuration
+# ==============================================================================
 
-# Header first
-st.title("Memory State")
+st.set_page_config(
+    page_title="Memory State | Mnemoverse",
+    page_icon="🧠",
+    layout="wide"
+)
 
-# Sidebar
+# ==============================================================================
+# Sidebar & Header
+# ==============================================================================
+
 schema = render_sidebar()
 
 if not schema:
     st.warning("Select a schema to view data.")
     st.stop()
 
-st.caption(f"Schema: `{schema}`")
-st.divider()
+page_header("🧠 Memory State", schema)
 
-# Adaline State
-st.subheader("Adaline Learning")
+# ==============================================================================
+# Adaline Learning State
+# ==============================================================================
+
+header_col, info_col = st.columns([10, 1])
+with header_col:
+    st.subheader("🎓 Adaline Learning")
+with info_col:
+    with st.popover("ℹ️"):
+        st.markdown("""
+        **Adaline Perceptron**
+        
+        Adaptive Linear Neuron for predicting concept utility.
+        
+        - **Updates**: Weight adjustments from feedback
+        - **Avg Error**: Prediction accuracy (lower = better)
+        - **Learning Rate**: Update step size (η)
+        """)
 
 adaline = run_query("""
     SELECT 
@@ -47,25 +92,49 @@ adaline = run_query("""
 """, schema)
 
 if adaline.empty:
-    st.info("Adaline state not persisted yet. Run experiment with feedback to populate.")
+    st.info(
+        "📭 Adaline state not persisted yet. "
+        "Run an experiment with feedback to populate."
+    )
 else:
+    row = adaline.iloc[0]
+    
     col1, col2, col3 = st.columns(3)
     
-    row = adaline.iloc[0]
     with col1:
-        st.metric("Updates", int(row['update_count']) if row['update_count'] else 0)
+        updates = int(row['update_count']) if row['update_count'] else 0
+        m_col, i_col = st.columns([4, 1])
+        with m_col:
+            st.metric("Updates", updates)
+        with i_col:
+            info_tooltip(METRIC_ADALINE_UPDATES)
+    
     with col2:
-        st.metric("Avg Error", f"{row['avg_error']:.4f}" if row['avg_error'] else "N/A")
+        avg_error = row['avg_error']
+        m_col, i_col = st.columns([4, 1])
+        with m_col:
+            st.metric("Avg Error", f"{avg_error:.4f}" if avg_error else "N/A")
+        with i_col:
+            info_tooltip(METRIC_AVG_ERROR)
+    
     with col3:
-        st.metric("Learning Rate", f"{row['learning_rate']:.4f}" if row['learning_rate'] else "N/A")
+        lr = row['learning_rate']
+        m_col, i_col = st.columns([4, 1])
+        with m_col:
+            st.metric("Learning Rate", f"{lr:.4f}" if lr else "N/A")
+        with i_col:
+            info_tooltip(METRIC_LEARNING_RATE)
     
     if row['updated_at']:
-        st.caption(f"Last updated: {row['updated_at']}")
+        st.caption(f"⏱️ Last updated: {row['updated_at']}")
 
 st.divider()
 
+# ==============================================================================
 # Feedback Distribution
-st.subheader("Feedback Distribution")
+# ==============================================================================
+
+st.subheader("📊 Feedback Distribution")
 
 feedback = run_query("""
     SELECT 
@@ -76,13 +145,20 @@ feedback = run_query("""
 """, schema)
 
 if feedback.empty:
-    st.info("No feedback events yet.")
+    st.info("📭 No feedback events yet. Complete tasks to generate feedback.")
 else:
     col1, col2 = st.columns([1, 2])
     
     with col1:
         for _, row in feedback.iterrows():
-            st.metric(row['feedback_type'].capitalize(), row['count'])
+            fb_type = row['feedback_type']
+            count = row['count']
+            emoji = "✅" if fb_type == 'positive' else "❌"
+            st.metric(
+                f"{emoji} {fb_type.capitalize()}",
+                count,
+                help=f"Number of {fb_type} feedback events"
+            )
     
     with col2:
         fig = px.pie(
@@ -90,15 +166,29 @@ else:
             values='count',
             names='feedback_type',
             color='feedback_type',
-            color_discrete_map={'positive': 'green', 'negative': 'red'}
+            color_discrete_map={
+                'positive': '#2ecc71',
+                'negative': '#e74c3c'
+            }
         )
-        fig.update_layout(height=250, margin=dict(t=0, b=0, l=0, r=0))
+        fig.update_layout(
+            height=250,
+            margin=dict(t=0, b=0, l=0, r=0),
+            showlegend=True
+        )
+        fig.update_traces(
+            hovertemplate='<b>%{label}</b><br>Count: %{value}<extra></extra>'
+        )
         st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 
-# Top Concepts by Utility
-st.subheader("Top Concepts by Adaline Utility")
+# ==============================================================================
+# Top Concepts by Adaline Utility
+# ==============================================================================
+
+st.subheader("🏆 Top Concepts by Utility")
+st.caption("Concepts ranked by their predicted usefulness for solving tasks")
 
 top_concepts = run_query("""
     SELECT 
@@ -114,30 +204,47 @@ top_concepts = run_query("""
 """, schema)
 
 if top_concepts.empty:
-    st.info("No state atoms with utility scores yet.")
+    st.info("📭 No state atoms with utility scores yet.")
 else:
     st.dataframe(
         top_concepts,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "concept": "Concept",
+            "concept": st.column_config.TextColumn(
+                "Concept",
+                help="Pattern or task identifier"
+            ),
             "adaline_utility": st.column_config.ProgressColumn(
                 "Utility",
                 format="%.3f",
                 min_value=0,
                 max_value=1,
+                help="Predicted usefulness (0-1, higher is better)"
             ),
-            "use_count": "Uses",
-            "positive_feedback_count": "Positive",
-            "negative_feedback_count": "Negative"
+            "use_count": st.column_config.NumberColumn(
+                "Uses",
+                help="Times this concept was retrieved"
+            ),
+            "positive_feedback_count": st.column_config.NumberColumn(
+                "✅ Positive",
+                help="Positive feedback count"
+            ),
+            "negative_feedback_count": st.column_config.NumberColumn(
+                "❌ Negative",
+                help="Negative feedback count"
+            )
         }
     )
 
 st.divider()
 
-# Recent Insights Quality
-st.subheader("Recent Insights")
+# ==============================================================================
+# Recent Insights
+# ==============================================================================
+
+st.subheader("💡 Recent Insights")
+st.caption("Latest solution attempts and their quality")
 
 insights = run_query("""
     SELECT 
@@ -153,20 +260,33 @@ insights = run_query("""
 """, schema)
 
 if insights.empty:
-    st.info("No insights recorded yet.")
+    st.info("📭 No insights recorded yet.")
 else:
     st.dataframe(
         insights,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "concept": "Concept",
-            "insight_preview": "Insight",
-            "is_successful": st.column_config.CheckboxColumn("Helped"),
+            "concept": st.column_config.TextColumn(
+                "Concept",
+                help="Task or pattern identifier"
+            ),
+            "insight_preview": st.column_config.TextColumn(
+                "Insight",
+                help="Solution attempt (truncated)"
+            ),
+            "is_successful": st.column_config.CheckboxColumn(
+                "Helped",
+                help="Did this insight help solve the task?"
+            ),
             "feedback_score": st.column_config.NumberColumn(
                 "Score",
-                format="%.2f"
+                format="%.2f",
+                help="Quality score from feedback (-1 to 1)"
             ),
-            "created_at": "Created"
+            "created_at": st.column_config.DatetimeColumn(
+                "Created",
+                help="When this insight was generated"
+            )
         }
     )
