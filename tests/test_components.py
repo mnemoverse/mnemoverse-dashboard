@@ -4,7 +4,7 @@ Tests for components.py - Shared UI Components.
 Tests cover:
 - render_sidebar() - Schema selector rendering
 - page_header() - Page header rendering
-- info_tooltip() - Help tooltip rendering
+- help_button() - Compact help tooltip rendering
 """
 
 import pytest
@@ -109,22 +109,23 @@ class TestPageHeader:
 
 
 # ==============================================================================
-# info_tooltip Tests
+# help_button Tests
 # ==============================================================================
 
 
-class TestInfoTooltip:
-    """Tests for info_tooltip function."""
+class TestHelpButton:
+    """Tests for help_button function."""
     
-    def test_renders_popover_with_markdown(self):
-        """Should render popover with markdown content."""
+    def test_renders_popover_with_caption(self):
+        """Should render ? popover with caption text."""
         with patch("components.st") as mock_st:
             mock_popover = MagicMock()
             mock_st.popover.return_value.__enter__ = MagicMock(return_value=mock_popover)
             mock_st.popover.return_value.__exit__ = MagicMock(return_value=None)
             
-            from components import info_tooltip
-            info_tooltip("**Help text** with markdown")
+            from components import help_button
+            help_button("Short help text")
             
-            mock_st.popover.assert_called_once_with("ℹ️")
-            mock_st.markdown.assert_called_once_with("**Help text** with markdown")
+            mock_st.popover.assert_called_once_with("?", help="Click for details")
+            mock_st.caption.assert_called_once_with("Short help text")
+

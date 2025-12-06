@@ -119,26 +119,23 @@ def page_header(title: str, schema: str | None = None) -> None:
 
 
 # ==============================================================================
-# Info Tooltip Component (for metric explanations)
+# Help Button Component (compact ? tooltips)
 # ==============================================================================
 
 
-def info_tooltip(text: str) -> None:
+def help_button(text: str) -> None:
     """
-    Render info icon (ℹ️) with help popup.
+    Render compact help button (?) with popup explanation.
     
-    Use this next to metrics to explain what they mean
-    and where the data comes from.
+    Use inline next to metrics, headers, or any element needing explanation.
+    Designed to be minimal and non-intrusive.
     
     Args:
-        text: Markdown text to display in popup
+        text: Short explanation text (1-3 sentences recommended)
         
     Example:
-        >>> col1, col2 = st.columns([4, 1])
-        >>> with col1:
-        ...     st.metric("Accuracy", "42%")
-        >>> with col2:
-        ...     info_tooltip("**Accuracy** = correct / total tasks")
+        >>> st.metric("Accuracy", "42%")
+        >>> help_button("Correct solutions / Total attempts")
     """
-    with st.popover("ℹ️"):
-        st.markdown(text)
+    with st.popover("?", help="Click for details"):
+        st.caption(text)

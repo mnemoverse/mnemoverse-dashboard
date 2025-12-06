@@ -28,14 +28,12 @@ import streamlit as st
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from components import info_tooltip, page_header, render_sidebar
+from components import page_header, render_sidebar
 from db import run_query, run_scalar
 from metric_definitions import (
-    METRIC_ADALINE_UPDATES,
-    METRIC_AVG_ERROR,
-    METRIC_LEARNING_RATE,
-    METRIC_USE_COUNT,
-    METRIC_UTILITY,
+    HELP_ADALINE_UPDATES,
+    HELP_AVG_ERROR,
+    HELP_LEARNING_RATE,
 )
 
 # ==============================================================================
@@ -64,20 +62,7 @@ page_header("🧠 Memory State", schema)
 # Adaline Learning State
 # ==============================================================================
 
-header_col, info_col = st.columns([10, 1])
-with header_col:
-    st.subheader("🎓 Adaline Learning")
-with info_col:
-    with st.popover("ℹ️"):
-        st.markdown("""
-        **Adaline Perceptron**
-        
-        Adaptive Linear Neuron for predicting concept utility.
-        
-        - **Updates**: Weight adjustments from feedback
-        - **Avg Error**: Prediction accuracy (lower = better)
-        - **Learning Rate**: Update step size (η)
-        """)
+st.subheader("🎓 Adaline Learning")
 
 adaline = run_query("""
     SELECT 
@@ -103,27 +88,15 @@ else:
     
     with col1:
         updates = int(row['update_count']) if row['update_count'] else 0
-        m_col, i_col = st.columns([4, 1])
-        with m_col:
-            st.metric("Updates", updates)
-        with i_col:
-            info_tooltip(METRIC_ADALINE_UPDATES)
+        st.metric("Updates", updates, help=HELP_ADALINE_UPDATES)
     
     with col2:
         avg_error = row['avg_error']
-        m_col, i_col = st.columns([4, 1])
-        with m_col:
-            st.metric("Avg Error", f"{avg_error:.4f}" if avg_error else "N/A")
-        with i_col:
-            info_tooltip(METRIC_AVG_ERROR)
+        st.metric("Avg Error", f"{avg_error:.4f}" if avg_error else "N/A", help=HELP_AVG_ERROR)
     
     with col3:
         lr = row['learning_rate']
-        m_col, i_col = st.columns([4, 1])
-        with m_col:
-            st.metric("Learning Rate", f"{lr:.4f}" if lr else "N/A")
-        with i_col:
-            info_tooltip(METRIC_LEARNING_RATE)
+        st.metric("Learning Rate", f"{lr:.4f}" if lr else "N/A", help=HELP_LEARNING_RATE)
     
     if row['updated_at']:
         st.caption(f"⏱️ Last updated: {row['updated_at']}")

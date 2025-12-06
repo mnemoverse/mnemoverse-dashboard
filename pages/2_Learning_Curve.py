@@ -31,16 +31,13 @@ import streamlit as st
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from components import info_tooltip, page_header, render_sidebar
+from components import page_header, render_sidebar
 from db import run_query, run_scalar
 from metric_definitions import (
-    METRIC_ACCURACY,
-    METRIC_BASELINE,
-    METRIC_CORRECT,
-    METRIC_DELTA,
-    METRIC_MEMORY_MODE,
-    METRIC_MEMORY_SIZE,
-    METRIC_TASKS_SOLVED,
+    HELP_ACCURACY,
+    HELP_CORRECT,
+    HELP_MEMORY_SIZE,
+    HELP_TASKS_SOLVED,
 )
 
 # ==============================================================================
@@ -69,21 +66,7 @@ page_header("📈 Learning Curve", schema)
 # Key Metrics Row
 # ==============================================================================
 
-# Header with info
-header_col, info_col = st.columns([10, 1])
-with header_col:
-    st.subheader("📊 Experiment Metrics")
-with info_col:
-    with st.popover("ℹ️"):
-        st.markdown("""
-        **Key Experiment Metrics**
-        
-        These metrics track progress of the current experiment:
-        - Tasks Solved: Total attempts
-        - Correct: Successful solutions
-        - Accuracy: Success rate (%)
-        - Memory Size: Knowledge accumulated
-        """)
+st.subheader("📊 Experiment Metrics")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -104,32 +87,16 @@ memory_size = run_scalar(
 accuracy = (tasks_correct / tasks_total * 100) if tasks_total > 0 else 0
 
 with col1:
-    m_col, i_col = st.columns([4, 1])
-    with m_col:
-        st.metric("Tasks Solved", tasks_total)
-    with i_col:
-        info_tooltip(METRIC_TASKS_SOLVED)
+    st.metric("Tasks Solved", tasks_total, help=HELP_TASKS_SOLVED)
 
 with col2:
-    m_col, i_col = st.columns([4, 1])
-    with m_col:
-        st.metric("Correct", tasks_correct)
-    with i_col:
-        info_tooltip(METRIC_CORRECT)
+    st.metric("Correct", tasks_correct, help=HELP_CORRECT)
 
 with col3:
-    m_col, i_col = st.columns([4, 1])
-    with m_col:
-        st.metric("Accuracy", f"{accuracy:.1f}%")
-    with i_col:
-        info_tooltip(METRIC_ACCURACY)
+    st.metric("Accuracy", f"{accuracy:.1f}%", help=HELP_ACCURACY)
 
 with col4:
-    m_col, i_col = st.columns([4, 1])
-    with m_col:
-        st.metric("Memory Size", memory_size)
-    with i_col:
-        info_tooltip(METRIC_MEMORY_SIZE)
+    st.metric("Memory Size", memory_size, help=HELP_MEMORY_SIZE)
 
 st.divider()
 

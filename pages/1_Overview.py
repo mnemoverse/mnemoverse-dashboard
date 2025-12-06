@@ -22,13 +22,13 @@ import streamlit as st
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from components import info_tooltip, page_header, render_sidebar
+from components import page_header, render_sidebar
 from db import run_query, run_scalar
 from metric_definitions import (
-    METRIC_FEEDBACK_EVENTS,
-    METRIC_HEBBIAN_EDGES,
-    METRIC_PROCESS_ATOMS,
-    METRIC_STATE_ATOMS,
+    HELP_FEEDBACK_EVENTS,
+    HELP_HEBBIAN_EDGES,
+    HELP_PROCESS_ATOMS,
+    HELP_STATE_ATOMS,
 )
 
 # ==============================================================================
@@ -57,56 +57,25 @@ page_header("📊 Overview", schema)
 # Key Metrics Row
 # ==============================================================================
 
-# Header with info button
-header_col, info_col = st.columns([10, 1])
-with header_col:
-    st.subheader("📈 Key Metrics")
-with info_col:
-    with st.popover("ℹ️"):
-        st.markdown("""
-        **What are these metrics?**
-        
-        - **State Atoms**: Learned concepts
-        - **Process Atoms**: Solution attempts  
-        - **Hebbian Edges**: Concept connections
-        - **Feedback Events**: Learning signals
-        
-        Click any metric for details.
-        """)
+st.subheader("📈 Key Metrics")
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     count = run_scalar("SELECT COUNT(*) FROM {schema}.state_atoms", schema)
-    metric_col, info_btn = st.columns([4, 1])
-    with metric_col:
-        st.metric("State Atoms", count or 0)
-    with info_btn:
-        info_tooltip(METRIC_STATE_ATOMS)
+    st.metric("State Atoms", count or 0, help=HELP_STATE_ATOMS)
 
 with col2:
     count = run_scalar("SELECT COUNT(*) FROM {schema}.process_atoms", schema)
-    metric_col, info_btn = st.columns([4, 1])
-    with metric_col:
-        st.metric("Process Atoms", count or 0)
-    with info_btn:
-        info_tooltip(METRIC_PROCESS_ATOMS)
+    st.metric("Process Atoms", count or 0, help=HELP_PROCESS_ATOMS)
 
 with col3:
     count = run_scalar("SELECT COUNT(*) FROM {schema}.hebbian_edges", schema)
-    metric_col, info_btn = st.columns([4, 1])
-    with metric_col:
-        st.metric("Hebbian Edges", count or 0)
-    with info_btn:
-        info_tooltip(METRIC_HEBBIAN_EDGES)
+    st.metric("Hebbian Edges", count or 0, help=HELP_HEBBIAN_EDGES)
 
 with col4:
     count = run_scalar("SELECT COUNT(*) FROM {schema}.feedback_events", schema)
-    metric_col, info_btn = st.columns([4, 1])
-    with metric_col:
-        st.metric("Feedback Events", count or 0)
-    with info_btn:
-        info_tooltip(METRIC_FEEDBACK_EVENTS)
+    st.metric("Feedback Events", count or 0, help=HELP_FEEDBACK_EVENTS)
 
 st.divider()
 

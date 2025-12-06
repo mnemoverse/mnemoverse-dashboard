@@ -25,14 +25,12 @@ import streamlit as st
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from components import info_tooltip, page_header, render_sidebar
+from components import page_header, render_sidebar
 from db import run_query, run_scalar
 from metric_definitions import (
-    METRIC_AVG_WEIGHT,
-    METRIC_COACTIVATIONS,
-    METRIC_CONCEPTS,
-    METRIC_CONNECTIONS,
-    METRIC_EDGE_WEIGHT,
+    HELP_AVG_WEIGHT,
+    HELP_CONCEPTS,
+    HELP_CONNECTIONS,
 )
 
 # ==============================================================================
@@ -61,49 +59,23 @@ page_header("🕸️ Knowledge Graph", schema)
 # Graph Statistics
 # ==============================================================================
 
-header_col, info_col = st.columns([10, 1])
-with header_col:
-    st.subheader("📊 Graph Statistics")
-with info_col:
-    with st.popover("ℹ️"):
-        st.markdown("""
-        **Hebbian Knowledge Graph**
-        
-        Visualizes concept relationships:
-        - **Concepts**: Learned patterns (nodes)
-        - **Connections**: Co-activation links (edges)
-        - **Weight**: Connection strength (0-1)
-        
-        Based on Hebbian learning principle.
-        """)
+st.subheader("📊 Graph Statistics")
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
     nodes = run_scalar("SELECT COUNT(*) FROM {schema}.state_atoms", schema) or 0
-    m_col, i_col = st.columns([4, 1])
-    with m_col:
-        st.metric("Concepts", nodes)
-    with i_col:
-        info_tooltip(METRIC_CONCEPTS)
+    st.metric("Concepts", nodes, help=HELP_CONCEPTS)
 
 with col2:
     edges = run_scalar("SELECT COUNT(*) FROM {schema}.hebbian_edges", schema) or 0
-    m_col, i_col = st.columns([4, 1])
-    with m_col:
-        st.metric("Connections", edges)
-    with i_col:
-        info_tooltip(METRIC_CONNECTIONS)
+    st.metric("Connections", edges, help=HELP_CONNECTIONS)
 
 with col3:
     avg_weight = run_scalar(
         "SELECT AVG(weight) FROM {schema}.hebbian_edges", schema
     )
-    m_col, i_col = st.columns([4, 1])
-    with m_col:
-        st.metric("Avg Weight", f"{avg_weight:.4f}" if avg_weight else "N/A")
-    with i_col:
-        info_tooltip(METRIC_AVG_WEIGHT)
+    st.metric("Avg Weight", f"{avg_weight:.4f}" if avg_weight else "N/A", help=HELP_AVG_WEIGHT)
 
 st.divider()
 
